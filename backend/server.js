@@ -1,12 +1,12 @@
-import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
 import cors from "cors";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
 import { initReminderCron } from "./utils/reminderCron.js";
-
-dotenv.config();
 
 const app = express();
 
@@ -28,8 +28,13 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/habits", habitRoutes);
+const mountRoutes = (base) => {
+    app.use(`${base}/auth`, authRoutes);
+    app.use(`${base}/habits`, habitRoutes);
+};
+
+mountRoutes("/api");
+mountRoutes(""); // Also mount on root to handle cases where /api prefix is missing
 
 // Root & Health Check
 app.get("/", (req, res) => res.send("🚀 Habit Tracker API is running..."));

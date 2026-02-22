@@ -21,7 +21,7 @@ const seedAdmin = async () => {
 
         const adminUser = new User({
             username: 'admin',
-            email: 'admin@habit.com',
+            email: 'gstippagol2005@gmail.com',
             password: hashedPassword,
             role: 'admin'
         });

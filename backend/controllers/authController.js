@@ -184,12 +184,12 @@ export const adminCreateUser = async (req, res) => {
 export const login = async (req, res) => {
     const { email, password, deviceInfo } = req.body;
     try {
-        const identifier = email.toLowerCase();
-        // Allow login with either email or username
+        const identifier = email.toLowerCase().trim();
+        // Allow login with either email or username (case-insensitive for both)
         const user = await User.findOne({
             $or: [
                 { email: identifier },
-                { username: { $regex: new RegExp('^' + identifier + '$', 'i') } }
+                { username: { $regex: new RegExp('^' + identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } }
             ]
         });
 

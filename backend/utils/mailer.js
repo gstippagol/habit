@@ -48,7 +48,10 @@ export const sendMail = async ({ to, subject, html, attachments = [] }) => {
         const info = await transporter.sendMail(mailOptions);
         console.log(`✅ Email sent to ${to}: ${info.messageId}`);
     } catch (error) {
-        console.error(`❌ Failed to send email to ${to}:`, error.message);
-        throw error; // Rethrow so caller can handle if needed
+        console.error(`❌ MAIL_DELIVERY_ERROR to ${to}:`, error);
+        if (error.code === 'EAUTH') {
+            console.error('   👉 Tip: This is an Authentication Error. Double-check your EMAIL_USER and EMAIL_PASS (App Password) in Render Dashboard.');
+        }
+        throw error;
     }
 };

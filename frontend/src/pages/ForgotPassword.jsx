@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import * as api from '../services/api';
 
@@ -10,21 +10,56 @@ const ForgotPassword = () => {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
+    const [countdown, setCountdown] = useState(60);
+    const [canResend, setCanResend] = useState(false);
     const navigate = useNavigate();
 
+    useEffect(() => {
+        let timer;
+        if (step === 2 && countdown > 0) {
+            timer = setInterval(() => {
+                setCountdown((prev) => prev - 1);
+            }, 1000);
+        } else if (countdown === 0) {
+            setCanResend(true);
+        }
+        return () => clearInterval(timer);
+    }, [step, countdown]);
+
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => setError(''), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [error]);
+
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => setMessage(''), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [message]);
+
     const handleRequestOTP = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         setError('');
         setLoading(true);
         try {
             await api.forgotPassword(email);
             setStep(2);
+            setCountdown(60);
+            setCanResend(false);
             setMessage('OTP sent to your email. Please check your inbox.');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to send OTP. Please try again.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleResendOTP = async () => {
+        if (!canResend) return;
+        await handleRequestOTP();
     };
 
     const handleResetPassword = async (e) => {
@@ -214,6 +249,28 @@ const ForgotPassword = () => {
                         >
                             {loading ? 'Processing...' : 'Reset Password'}
                         </button>
+
+                        <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#888' }}>
+                            {countdown > 0 ? (
+                                <span>Resend code in <strong style={{ color: '#00ccff' }}>{countdown}s</strong></span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleResendOTP}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#00ccff',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        fontSize: '0.9rem'
+                                    }}
+                                >
+                                    Resend Code
+                                </button>
+                            )}
+                        </div>
                     </form>
                 )}
 

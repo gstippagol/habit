@@ -10,6 +10,7 @@ import Navbar from "./components/Navbar";
 import Admin from "./pages/Admin";
 import AddUser from "./pages/AddUser";
 import History from "./pages/History";
+import Bin from "./pages/Bin";
 
 export default function App() {
     return (
@@ -46,6 +47,11 @@ export default function App() {
                     <Route path="/admin/add-user" element={
                         <ProtectedRoute>
                             <AddUser />
+                        </ProtectedRoute>
+                    } />
+                    <Route path="/bin" element={
+                        <ProtectedRoute>
+                            <Bin />
                         </ProtectedRoute>
                     } />
                 </Routes>

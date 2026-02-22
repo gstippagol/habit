@@ -6,7 +6,9 @@ const habitSchema = new mongoose.Schema({
     completedDates: { type: [String], default: [] }, // Store dates as YYYY-MM-DD strings
     streak: { type: Number, default: 0 },
     target: { type: Number, default: 10 },
-    isArchived: { type: Boolean, default: false }
+    isArchived: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 const Habit = mongoose.model('Habit', habitSchema);

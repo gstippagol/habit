@@ -25,8 +25,15 @@ const Admin = () => {
         loadUsers();
     }, []);
 
-    const loadUsers = async () => {
-        setLoading(true);
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => setMessage(''), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [message]);
+
+    const loadUsers = async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const data = await api.adminFetchUsers();
             setUsers(data);
@@ -63,8 +70,7 @@ const Admin = () => {
             await api.adminUpdateUser(editingUserId, updatePayload);
             setMessage('Account attributes synchronized successfully.');
             setEditingUserId(null);
-            loadUsers();
-            setTimeout(() => setMessage(''), 3000);
+            loadUsers(true);
         } catch (err) {
             alert(err.response?.data?.message || 'Update failed');
         }
@@ -75,7 +81,6 @@ const Admin = () => {
             await api.adminUpdateUser(user._id, { isActive: !user.isActive });
             setUsers(users.map(u => u._id === user._id ? { ...u, isActive: !u.isActive } : u));
             setMessage(`Account ${!user.isActive ? 'Reactivated' : 'Deactivated'} successfully.`);
-            setTimeout(() => setMessage(''), 3000);
         } catch (err) {
             alert("Status synchronization failed.");
         }
@@ -93,7 +98,6 @@ const Admin = () => {
             await api.adminDeleteUser(id);
             setUsers(users.filter(u => u._id !== id));
             setMessage('User record permanently removed.');
-            setTimeout(() => setMessage(''), 3000);
         } catch (err) {
             alert(err.response?.data?.message || 'Delete failed');
         }
@@ -280,7 +284,7 @@ const Admin = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? (
+                            {loading && users.length === 0 ? (
                                 <tr><td colSpan="5" style={{ textAlign: 'center', padding: '5rem', color: '#555', fontWeight: '800' }}>INITIALIZING DATABASE HANDLER...</td></tr>
                             ) : filteredUsers.length === 0 ? (
                                 <tr><td colSpan="5" style={{ textAlign: 'center', padding: '5rem', color: '#444', fontWeight: '800' }}>NO MATCHING RECORDS FOUND</td></tr>

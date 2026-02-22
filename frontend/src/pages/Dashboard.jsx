@@ -27,10 +27,11 @@ const Dashboard = () => {
     const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
     const dayNumbers = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-    const loadHabits = useCallback(async () => {
+    const loadHabits = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const data = await api.fetchHabits();
-            setHabits(data.filter(h => !h.isArchived));
+            setHabits(data.filter(h => !h.isArchived && !h.isDeleted));
         } catch (err) {
             console.error("Dashboard failed to load habits", err);
         } finally {
@@ -39,12 +40,12 @@ const Dashboard = () => {
     }, []);
 
     useEffect(() => {
-        loadHabits();
+        loadHabits(habits.length > 0);
     }, [loadHabits]);
 
     useEffect(() => {
         if (notification) {
-            const timer = setTimeout(() => setNotification(''), 3000);
+            const timer = setTimeout(() => setNotification(''), 5000);
             return () => clearTimeout(timer);
         }
     }, [notification]);
@@ -105,11 +106,11 @@ const Dashboard = () => {
     };
 
     const handleDelete = async (id, title) => {
-        if (!window.confirm(`Permanently delete "${title}"?`)) return;
+        if (!window.confirm(`Move "${title}" to Recycle Bin? It will be stored for 30 days.`)) return;
         try {
             await api.deleteHabit(id);
             setHabits(prev => prev.filter(h => h._id !== id));
-            setNotification(`"${title}" deleted from records`);
+            setNotification(`"${title}" moved to Recycle Bin`);
         } catch (e) {
             console.error(e);
         }
@@ -127,7 +128,7 @@ const Dashboard = () => {
         }
     };
 
-    if (loading) {
+    if (loading && habits.length === 0) {
         return (
             <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
@@ -160,9 +161,6 @@ const Dashboard = () => {
                                 <h1 style={{ fontSize: '2rem', fontWeight: '900', margin: 0 }}>{currentMonthName} <span style={{ color: '#00ccff' }}>{currentYear}</span></h1>
                                 <p style={{ color: '#555', fontWeight: '700', marginTop: '4px', fontSize: '0.8rem', letterSpacing: '1px' }}>DISCIPLINE OVER MOTIVATION</p>
                             </div>
-                            <button onClick={() => navigate('/archived')} className="mobile-full-width" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#888', padding: '0.6rem 1.4rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }} onMouseOver={(e) => { e.currentTarget.style.borderColor = '#00ccff'; e.currentTarget.style.color = '#fff'; }} onMouseOut={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#888'; }}>
-                                📦 Archive Gallery
-                            </button>
                         </div>
 
                         <div className="mobile-stack" style={{ display: 'flex', gap: '1rem', marginBottom: '2.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.8rem', borderRadius: '18px', border: '1px solid rgba(255,255,255,0.03)' }}>
@@ -334,9 +332,9 @@ const Dashboard = () => {
     );
 };
 
-const PerformanceInsights = ({ habits, currentMonthIdx, currentYear }) => {
+const PerformanceInsights = React.memo(({ habits, currentMonthIdx, currentYear }) => {
     // 1. Monthly Progress Data
-    const monthlyProgressData = habits.map(h => {
+    const monthlyProgressData = React.useMemo(() => habits.map(h => {
         const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
         const compCount = (h.completedDates || []).filter(d => d.startsWith(mPre)).length;
         const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
@@ -345,30 +343,32 @@ const PerformanceInsights = ({ habits, currentMonthIdx, currentYear }) => {
             fullName: h.title,
             progress: Math.round((compCount / daysInMonth) * 100)
         };
-    });
+    }), [habits, currentMonthIdx, currentYear]);
 
     // 2. Weekly Progress Calculation (current month)
-    const weeks = [1, 2, 3, 4];
-    const weeklyProgressData = weeks.map(w => {
-        let totalComp = 0;
-        habits.forEach(h => {
-            const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
-            const weekComp = (h.completedDates || []).filter(d => {
-                if (!d.startsWith(mPre)) return false;
-                const day = parseInt(d.split('-')[2]);
-                return day > (w - 1) * 7 && day <= w * 7;
-            }).length;
-            totalComp += weekComp;
+    const weeklyProgressData = React.useMemo(() => {
+        const weeks = [1, 2, 3, 4];
+        return weeks.map(w => {
+            let totalComp = 0;
+            habits.forEach(h => {
+                const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+                const weekComp = (h.completedDates || []).filter(d => {
+                    if (!d.startsWith(mPre)) return false;
+                    const day = parseInt(d.split('-')[2]);
+                    return day > (w - 1) * 7 && day <= w * 7;
+                }).length;
+                totalComp += weekComp;
+            });
+            const totalPossible = habits.length * 7 || 1;
+            return {
+                name: `W${w}`,
+                progress: Math.round((totalComp / totalPossible) * 100)
+            };
         });
-        const totalPossible = habits.length * 7 || 1;
-        return {
-            name: `W${w}`,
-            progress: Math.round((totalComp / totalPossible) * 100)
-        };
-    });
+    }, [habits, currentMonthIdx, currentYear]);
 
     // 3. Most Missed (Current Month)
-    const mostMissedData = habits.map(h => {
+    const mostMissedData = React.useMemo(() => habits.map(h => {
         const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
         let misses = 0;
         const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
@@ -389,31 +389,34 @@ const PerformanceInsights = ({ habits, currentMonthIdx, currentYear }) => {
             fullName: h.title,
             misses
         };
-    }).sort((a, b) => b.misses - a.misses).slice(0, 5);
+    }).sort((a, b) => b.misses - a.misses).slice(0, 5), [habits, currentMonthIdx, currentYear]);
 
     // 4. Consistency Pie (Current Month)
-    let totalCompletions = 0;
-    const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
-    habits.forEach(h => {
-        (h.completedDates || []).forEach(d => {
-            if (d.startsWith(mPre)) totalCompletions++;
+    const consistencyData = React.useMemo(() => {
+        let totalCompletions = 0;
+        const mPre = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+        habits.forEach(h => {
+            (h.completedDates || []).forEach(d => {
+                if (d.startsWith(mPre)) totalCompletions++;
+            });
         });
-    });
 
-    const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
-    // Total possible is habits * days passed so far in the month
-    const today = new Date();
-    const currentDay = today.getMonth() === currentMonthIdx ? today.getDate() : daysInMonth;
-    const totalPossibleOverall = habits.length * currentDay || 1;
+        const daysInMonth = new Date(currentYear, currentMonthIdx + 1, 0).getDate();
+        const today = new Date();
+        const currentDay = today.getMonth() === currentMonthIdx ? today.getDate() : daysInMonth;
+        const totalPossibleOverall = habits.length * currentDay || 1;
 
-    const consistencyData = [
-        { name: 'Consistent', value: totalCompletions },
-        { name: 'Missed', value: Math.max(0, totalPossibleOverall - totalCompletions) }
-    ];
+        return [
+            { name: 'Consistent', value: totalCompletions },
+            { name: 'Missed', value: Math.max(0, totalPossibleOverall - totalCompletions) }
+        ];
+    }, [habits, currentMonthIdx, currentYear]);
 
     // Helper: Recommended Action
-    const leastConsistent = [...monthlyProgressData].sort((a, b) => a.progress - b.progress)[0];
-    const recAction = leastConsistent ? `Focus on ${leastConsistent.fullName}. Persistence is the foundation of growth.` : "Excellence achieved! Your consistency is exemplary.";
+    const recAction = React.useMemo(() => {
+        const leastConsistent = [...monthlyProgressData].sort((a, b) => a.progress - b.progress)[0];
+        return leastConsistent ? `Focus on ${leastConsistent.fullName}. Persistence is the foundation of growth.` : "Excellence achieved! Your consistency is exemplary.";
+    }, [monthlyProgressData]);
 
     return (
         <div style={{ marginBottom: '4rem' }}>
@@ -543,7 +546,7 @@ const PerformanceInsights = ({ habits, currentMonthIdx, currentYear }) => {
             </div>
         </div>
     );
-};
+});
 
 const InsightCard = ({ title, children }) => (
     <div

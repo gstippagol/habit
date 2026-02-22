@@ -18,6 +18,13 @@ const Login = () => {
         }
     }, [location]);
 
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => setError(''), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [error]);
+
     const handleRealLogin = async (e) => {
         e.preventDefault();
 
@@ -100,10 +107,10 @@ const Login = () => {
 
                 <form onSubmit={handleRealLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                     <div style={{ textAlign: 'left' }}>
-                        <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#555', marginBottom: '8px', display: 'block', marginLeft: '4px' }}>EMAIL ADDRESS</label>
+                        <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#555', marginBottom: '8px', display: 'block', marginLeft: '4px' }}>EMAIL OR USERNAME</label>
                         <input
-                            type="email"
-                            placeholder="name@example.com"
+                            type="text"
+                            placeholder="Email or Username"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             style={{

@@ -115,46 +115,6 @@ input {
     gap: 1.5rem !important;
   }
 
-  /* Specific Header Scaling */
-  .header-nav {
-    padding: 0.8rem 1rem !important;
-    flex-wrap: wrap !important;
-    justify-content: center !important;
-  }
-
-  .logo-box {
-    width: 35px !important;
-    height: 35px !important;
-    font-size: 1rem !important;
-    border-radius: 8px !important;
-  }
-
-  .brand-text {
-    font-size: 0.95rem !important;
-  }
-
-  .nav-links-wrapper {
-    gap: 0.2rem !important;
-    justify-content: space-around !important;
-    width: 100% !important;
-    margin-top: 5px !important;
-  }
-
-  .nav-link-btn {
-    padding: 0.5rem 0.6rem !important;
-    font-size: 0.75rem !important;
-    flex: 1 !important;
-    text-align: center !important;
-    border-radius: 8px !important;
-  }
-
-  .logout-btn {
-    padding: 0.4rem 0.8rem !important;
-    font-size: 0.75rem !important;
-    border-radius: 8px !important;
-    margin-left: auto !important;
-  }
-
   /* Admin Table Optimization */
   .mobile-admin-table td {
     padding: 1rem !important;

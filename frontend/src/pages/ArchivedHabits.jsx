@@ -17,7 +17,7 @@ const ArchivedHabits = () => {
     const loadArchivedHabits = async () => {
         try {
             const data = await api.fetchHabits();
-            setArchivedHabits(data.filter(h => h.isArchived));
+            setArchivedHabits(data.filter(h => h.isArchived && !h.isDeleted));
         } catch (err) {
             console.error("Failed to load archives", err);
         } finally {
@@ -27,7 +27,7 @@ const ArchivedHabits = () => {
 
     const showNotification = (msg) => {
         setNotification(msg);
-        setTimeout(() => setNotification(''), 3000);
+        setTimeout(() => setNotification(''), 5000);
     };
 
     const handleRestore = async (id, title) => {
@@ -41,11 +41,11 @@ const ArchivedHabits = () => {
     };
 
     const handleDelete = async (id, title) => {
-        if (!window.confirm(`Permanently delete "${title}"?`)) return;
+        if (!window.confirm(`Move "${title}" to Recycle Bin? It will be safely stored for 30 days.`)) return;
         try {
             await api.deleteHabit(id);
             setArchivedHabits(prev => prev.filter(h => h._id !== id));
-            showNotification(`Deleted "${title}" permanently`);
+            showNotification(`Moved "${title}" to Recycle Bin`);
         } catch (err) {
             console.error("Delete failed", err);
         }

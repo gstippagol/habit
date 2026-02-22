@@ -11,6 +11,13 @@ const AddUser = () => {
     const [message, setMessage] = useState({ type: '', text: '' });
     const navigate = useNavigate();
 
+    React.useEffect(() => {
+        if (message.text) {
+            const timer = setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [message]);
+
     const handleCreateUser = async (e) => {
         e.preventDefault();
         if (!username || !email || !password) {

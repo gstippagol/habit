@@ -8,7 +8,7 @@ const activityLogSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['login', 'logout', 'habit_create', 'habit_toggle', 'habit_archive', 'session_duration'],
+        enum: ['login', 'logout', 'habit_create', 'habit_toggle', 'habit_archive', 'session_duration', 'habit_delete_soft', 'habit_restore'],
         required: true
     },
     details: {

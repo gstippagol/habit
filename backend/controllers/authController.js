@@ -117,7 +117,7 @@ const sendCredentialsEmail = async (email, username, password) => {
                 <p><strong>Username:</strong> ${username}</p>
                 <p><strong>Password:</strong> ${password}</p>
             </div>
-            <p>You can now log in at <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login">Habit Tracker Login</a></p>
+            <p>You can now log in at <a href="${process.env.FRONTEND_URL || 'https://pvthabit-tracker.netlify.app'}/login">Habit Tracker Login</a></p>
             <p style="color: #888; font-size: 12px; margin-top: 30px;">Please change your password after your first login.</p>
         </div>
     `;
@@ -132,7 +132,7 @@ const sendCredentialsEmail = async (email, username, password) => {
 export const register = async (req, res) => {
     const { username, email, password } = req.body;
     try {
-        const userExists = await User.findOne({ email });
+        const userExists = await User.findOne({ email: email.toLowerCase() });
         if (userExists) return res.status(400).json({ message: 'User already exists' });
 
         const hashedPassword = await bcrypt.hash(password, 12);
@@ -153,7 +153,7 @@ export const register = async (req, res) => {
 export const adminCreateUser = async (req, res) => {
     const { username, email, password, role } = req.body;
     try {
-        const userExists = await User.findOne({ email });
+        const userExists = await User.findOne({ email: email.toLowerCase() });
         if (userExists) return res.status(400).json({ message: 'User already exists' });
 
         const hashedPassword = await bcrypt.hash(password, 12);
@@ -164,8 +164,8 @@ export const adminCreateUser = async (req, res) => {
             role: role || 'user'
         });
 
-        // Send email (async, don't wait for it to block response)
-        sendCredentialsEmail(email, username, password);
+        // Send email
+        await sendCredentialsEmail(email, username, password);
 
         res.status(201).json({
             message: 'User created successfully and email notification triggered',
@@ -184,7 +184,14 @@ export const adminCreateUser = async (req, res) => {
 export const login = async (req, res) => {
     const { email, password, deviceInfo } = req.body;
     try {
-        const user = await User.findOne({ email });
+        const identifier = email.toLowerCase();
+        // Allow login with either email or username
+        const user = await User.findOne({
+            $or: [
+                { email: identifier },
+                { username: { $regex: new RegExp('^' + identifier + '$', 'i') } }
+            ]
+        });
 
         if (user && (await bcrypt.compare(password, user.password))) {
             // Check if account is active
@@ -214,7 +221,7 @@ export const login = async (req, res) => {
                 token: generateToken(user._id)
             });
         } else {
-            res.status(401).json({ message: 'Invalid email or password' });
+            res.status(401).json({ message: 'Invalid credentials or password' });
         }
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -243,8 +250,12 @@ const sendOTPEmail = async (email, otp) => {
 export const forgotPassword = async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ message: 'User not found' });
+        console.log(`🔑 OTP Requested for: ${email}`);
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user) {
+            console.warn(`🕵️ ForgotPassword: User not found for ${email}`);
+            return res.status(404).json({ message: 'User not found' });
+        }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         user.resetPasswordOTP = otp;
@@ -254,6 +265,7 @@ export const forgotPassword = async (req, res) => {
         await sendOTPEmail(email, otp);
         res.json({ message: 'OTP sent to your email' });
     } catch (error) {
+        console.error(`❌ ForgotPassword Error for ${email}:`, error.message);
         res.status(500).json({ message: error.message });
     }
 };
@@ -262,7 +274,7 @@ export const resetPassword = async (req, res) => {
     const { email, otp, newPassword } = req.body;
     try {
         const user = await User.findOne({
-            email,
+            email: email.toLowerCase(),
             resetPasswordOTP: otp,
             resetPasswordExpires: { $gt: Date.now() }
         });

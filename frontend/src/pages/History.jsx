@@ -4,6 +4,7 @@ import * as api from '../services/api';
 import Footer from '../components/Footer';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { Link } from 'react-router-dom';
 
 const History = () => {
     const [habits, setHabits] = useState([]);
@@ -19,8 +20,30 @@ const History = () => {
     const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
     const dayNumbers = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-    // Generate year range (e.g., last 5 years)
     const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - i);
+
+    const quotes = [
+        "First we make our habits, then our habits make us.",
+        "Success is the sum of small efforts, repeated day in and day out.",
+        "Motivation is what gets you started. Habit is what keeps you going.",
+        "Your future is found in your daily routine.",
+        "Small steps in the right direction can turn out to be the biggest step of your life.",
+        "The secret of your future is hidden in your daily routine.",
+        "Discipline is choosing between what you want now and what you want most."
+    ];
+
+    const activeHabitsForPeriod = habits.filter(h => {
+        if (h.isDeleted) return false; // Hide all deleted/bin habits from history
+
+        const createDate = new Date(h.createdAt);
+        const periodEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+
+        // Created before or during this month OR has completions in this month
+        const mPre = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+        const hasCompletions = (h.completedDates || []).some(d => d.startsWith(mPre));
+
+        return (createDate <= periodEnd) || hasCompletions;
+    });
 
     const handleShowActivity = () => {
         setSelectedMonth(inputMonth);
@@ -29,32 +52,29 @@ const History = () => {
 
     const handleExportPDF = () => {
         try {
-            const doc = new jsPDF('l', 'mm', 'a4'); // landscape
-
-            // Header
+            const doc = new jsPDF('l', 'mm', 'a4');
             doc.setFontSize(22);
             doc.setTextColor(0, 204, 255);
             doc.text('HABIT TRACKER - ACTIVITY REPORT', 14, 20);
-
             doc.setFontSize(12);
             doc.setTextColor(100);
             doc.text(`Period: ${monthNames[selectedMonth]} ${selectedYear}`, 14, 28);
 
-            // Prepare Table Data
-            const headers = [['Date', ...habits.map(h => h.title)]];
+            const headers = [['Date', ...activeHabitsForPeriod.map(h => h.title)]];
             const data = dayNumbers.map(day => {
                 const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 return [
                     String(day).padStart(2, '0'),
-                    ...habits.map(h => {
+                    ...activeHabitsForPeriod.map(h => {
+                        const createDateOnly = new Date(h.createdAt).toISOString().split('T')[0];
+                        if (dateStr < createDateOnly) return '-';
                         const isComp = (h.completedDates || []).includes(dateStr);
                         return isComp ? 'YES' : 'NO';
                     })
                 ];
             });
 
-            // Totals Row
-            const totalsRow = ['TOTAL', ...habits.map(h => {
+            const totalsRow = ['TOTAL', ...activeHabitsForPeriod.map(h => {
                 const mPre = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
                 const count = (h.completedDates || []).filter(d => d.startsWith(mPre)).length;
                 const pct = Math.round((count / daysInMonth) * 100);
@@ -62,30 +82,17 @@ const History = () => {
             })];
             data.push(totalsRow);
 
-            // AutoTable implementation
             autoTable(doc, {
                 head: headers,
                 body: data,
                 startY: 35,
                 theme: 'grid',
-                headStyles: {
-                    fillColor: [10, 10, 12],
-                    textColor: [0, 204, 255],
-                    fontSize: 8,
-                    fontStyle: 'bold'
-                },
-                bodyStyles: {
-                    fontSize: 7,
-                    textColor: [50, 50, 50]
-                },
-                alternateRowStyles: {
-                    fillColor: [245, 245, 245]
-                },
-                columnStyles: {
-                    0: { fontStyle: 'bold', textColor: [0, 0, 0] }
-                },
+                headStyles: { fillColor: [10, 10, 12], textColor: [0, 204, 255], fontSize: 8, fontStyle: 'bold' },
+                bodyStyles: { fontSize: 7, textColor: [50, 50, 50] },
+                alternateRowStyles: { fillColor: [245, 245, 245] },
+                columnStyles: { 0: { fontStyle: 'bold', textColor: [0, 0, 0] } },
                 didParseCell: (data) => {
-                    if (data.row.index === dayNumbers.length) { // Total Row
+                    if (data.row.index === dayNumbers.length) {
                         data.cell.styles.fillColor = [230, 247, 255];
                         data.cell.styles.fontStyle = 'bold';
                         data.cell.styles.textColor = [0, 102, 128];
@@ -99,56 +106,35 @@ const History = () => {
                 }
             });
 
-            // --- Add Chart Section ---
             const finalY = (doc).lastAutoTable.finalY || 150;
-            const chartStartY = finalY + 15;
-
-            // Check if we need a new page for the chart
-            if (chartStartY + 80 > doc.internal.pageSize.getHeight()) {
-                doc.addPage();
-                doc.setFontSize(14);
-                doc.setTextColor(10, 10, 12);
-                doc.text('MONTHLY PERFORMANCE CHART', 14, 20);
-                drawChart(doc, 30);
-            } else {
-                doc.setDrawColor(220);
-                doc.line(14, finalY + 5, 280, finalY + 5);
-                doc.setFontSize(14);
-                doc.setTextColor(10, 10, 12);
-                doc.text('MONTHLY PERFORMANCE CHART', 14, finalY + 15);
-                drawChart(doc, finalY + 25);
-            }
-
-            function drawChart(doc, startY) {
+            const drawChart = (doc, startY) => {
                 const chartWidth = 250;
                 const barSpacing = 8;
                 const barHeight = 8;
-
-                habits.forEach((habit, index) => {
+                activeHabitsForPeriod.forEach((habit, index) => {
                     const mPre = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
                     const count = (habit.completedDates || []).filter(d => d.startsWith(mPre)).length;
                     const pct = Math.round((count / daysInMonth) * 100);
-
                     const currentY = startY + (index * (barHeight + barSpacing));
-
-                    // Label
-                    doc.setFontSize(8);
-                    doc.setTextColor(80);
+                    doc.setFontSize(8); doc.setTextColor(80);
                     doc.text(habit.title.toUpperCase(), 14, currentY + 6);
-
-                    // Background Bar
-                    doc.setFillColor(240, 240, 240);
-                    doc.rect(50, currentY, chartWidth * 0.8, barHeight, 'F');
-
-                    // Progress Bar
-                    doc.setFillColor(0, 204, 255);
-                    doc.rect(50, currentY, (chartWidth * 0.8) * (pct / 100), barHeight, 'F');
-
-                    // Percentage Text
-                    doc.setTextColor(0, 102, 128);
-                    doc.setFontSize(7);
+                    doc.setFillColor(240, 240, 240); doc.rect(50, currentY, chartWidth * 0.8, barHeight, 'F');
+                    doc.setFillColor(0, 204, 255); doc.rect(50, currentY, (chartWidth * 0.8) * (pct / 100), barHeight, 'F');
+                    doc.setTextColor(0, 102, 128); doc.setFontSize(7);
                     doc.text(`${pct}%`, 50 + (chartWidth * 0.8) + 5, currentY + 6);
                 });
+            };
+
+            if (finalY + 15 + 80 > doc.internal.pageSize.getHeight()) {
+                doc.addPage();
+                doc.setFontSize(14); doc.setTextColor(10, 10, 12);
+                doc.text('MONTHLY PERFORMANCE CHART', 14, 20);
+                drawChart(doc, 30);
+            } else {
+                doc.setDrawColor(220); doc.line(14, finalY + 5, 280, finalY + 5);
+                doc.setFontSize(14); doc.setTextColor(10, 10, 12);
+                doc.text('MONTHLY PERFORMANCE CHART', 14, finalY + 15);
+                drawChart(doc, finalY + 25);
             }
 
             doc.save(`Habit_Ledger_${monthNames[selectedMonth]}_${selectedYear}.pdf`);
@@ -158,10 +144,11 @@ const History = () => {
         }
     };
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const data = await api.fetchHabits();
-            setHabits(data.filter(h => !h.isArchived));
+            setHabits(data);
         } catch (err) {
             console.error("Failed to load history data", err);
         } finally {
@@ -170,10 +157,10 @@ const History = () => {
     }, []);
 
     useEffect(() => {
-        loadData();
+        loadData(habits.length > 0);
     }, [loadData]);
 
-    if (loading) {
+    if (loading && habits.length === 0) {
         return (
             <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
@@ -202,8 +189,6 @@ const History = () => {
                                 </span>
                             </p>
                         </div>
-
-                        {/* Filter Section */}
                         <div className="mobile-stack" style={{ display: 'flex', gap: '30px', alignItems: 'flex-end' }}>
                             <div style={{ display: 'flex', gap: '15px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -228,142 +213,81 @@ const History = () => {
                                 </div>
                             </div>
                             <div className="mobile-stack" style={{ display: 'flex', gap: '15px', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
-                                <button
-                                    onClick={handleShowActivity}
-                                    className="mobile-full-width"
-                                    style={{
-                                        background: '#00ccff',
-                                        color: '#000',
-                                        border: 'none',
-                                        padding: '10px 25px',
-                                        borderRadius: '12px',
-                                        fontWeight: '900',
-                                        fontSize: '0.8rem',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px',
-                                        cursor: 'pointer',
-                                        height: '43px',
-                                        transition: 'all 0.2s ease',
-                                        minWidth: '160px'
-                                    }}
-                                    onMouseOver={e => {
-                                        e.target.style.transform = 'translateY(-2px)';
-                                        e.target.style.boxShadow = '0 5px 15px rgba(0,204,255,0.4)';
-                                    }}
-                                    onMouseOut={e => {
-                                        e.target.style.transform = 'translateY(0)';
-                                        e.target.style.boxShadow = 'none';
-                                    }}
-                                >
-                                    Show Activity
-                                </button>
-                                <button
-                                    onClick={handleExportPDF}
-                                    className="mobile-full-width"
-                                    style={{
-                                        background: 'transparent',
-                                        color: '#00ccff',
-                                        border: '1px solid rgba(0, 204, 255, 0.3)',
-                                        padding: '10px 20px',
-                                        borderRadius: '12px',
-                                        fontWeight: '900',
-                                        fontSize: '0.8rem',
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '1px',
-                                        cursor: 'pointer',
-                                        height: '43px',
-                                        transition: 'all 0.2s ease',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        justifyContent: 'center',
-                                        minWidth: '160px'
-                                    }}
-                                    onMouseOver={e => {
-                                        e.target.style.background = 'rgba(0, 204, 255, 0.05)';
-                                        e.target.style.borderColor = '#00ccff';
-                                    }}
-                                    onMouseOut={e => {
-                                        e.target.style.background = 'transparent';
-                                        e.target.style.borderColor = 'rgba(0, 204, 255, 0.3)';
-                                    }}
-                                >
+                                <button onClick={handleShowActivity} style={{ background: '#00ccff', color: '#000', border: 'none', padding: '10px 25px', borderRadius: '12px', fontWeight: '900', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', cursor: 'pointer', height: '43px' }}>Show Activity</button>
+                                <button onClick={handleExportPDF} style={{ background: 'transparent', color: '#00ccff', border: '1px solid rgba(0, 204, 255, 0.3)', padding: '10px 20px', borderRadius: '12px', fontWeight: '900', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', cursor: 'pointer', height: '43px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                     Export PDF
                                 </button>
                             </div>
                         </div>
                     </header>
-
-                    <div style={{ overflowX: 'auto', borderRadius: '1.5rem', border: '1px solid rgba(255, 255, 255, 0.05)', background: '#080809' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                            <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <th style={{ padding: '1.5rem 2.5rem', color: '#333', fontSize: '0.8rem', fontWeight: '900', letterSpacing: '1px' }}>DATE</th>
-                                    {habits.map(habit => (
-                                        <th key={habit._id} style={{ padding: '1.5rem 1.5rem', color: '#00ccff', fontSize: '0.8rem', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>
-                                            {habit.title}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {dayNumbers.map(day => {
-                                    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                                    return (
-                                        <tr key={day} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', transition: '0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.01)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
-                                            <td style={{ padding: '1.2rem 2.5rem', fontWeight: '800', color: '#444' }}>
-                                                {String(day).padStart(2, '0')}
-                                            </td>
-                                            {habits.map(habit => {
-                                                const isCompleted = (habit.completedDates || []).includes(dateStr);
-                                                return (
-                                                    <td key={habit._id} style={{ padding: '1.2rem 1.5rem' }}>
-                                                        <span style={{
-                                                            padding: '6px 16px',
-                                                            borderRadius: '50px',
-                                                            fontSize: '0.75rem',
-                                                            fontWeight: '900',
-                                                            textTransform: 'uppercase',
-                                                            background: isCompleted ? 'rgba(0, 204, 255, 0.1)' : 'rgba(239, 68, 68, 0.05)',
-                                                            color: isCompleted ? '#00ccff' : '#444',
-                                                            border: isCompleted ? '1px solid rgba(0, 204, 255, 0.2)' : '1px solid rgba(239, 68, 68, 0.1)'
-                                                        }}>
-                                                            {isCompleted ? 'YES' : 'NO'}
-                                                        </span>
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                            <tfoot>
-                                <tr style={{ background: 'rgba(0, 204, 255, 0.03)', borderTop: '2px solid rgba(255,255,255,0.05)' }}>
-                                    <td style={{ padding: '1.5rem 2.5rem', fontWeight: '900', color: '#00ccff', fontSize: '0.8rem', letterSpacing: '1px' }}>
-                                        TOTAL
-                                    </td>
-                                    {habits.map(habit => {
-                                        const mPre = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
-                                        const compCount = (habit.completedDates || []).filter(d => d.startsWith(mPre)).length;
-                                        const percentage = Math.round((compCount / daysInMonth) * 100);
+                    {activeHabitsForPeriod.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '8rem 2rem', background: 'rgba(255,255,255,0.01)', borderRadius: '2rem', border: '1px dashed rgba(255,255,255,0.05)' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '2rem', filter: 'grayscale(1)', opacity: 0.3 }}>🏛️</div>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: '900', marginBottom: '1.2rem', color: '#333', letterSpacing: '-1px' }}>No Records for {monthNames[selectedMonth]}</h2>
+                            <p style={{ maxWidth: '500px', margin: '0 auto 2.5rem', lineHeight: '1.8', color: '#00ccff', fontSize: '1.1rem', fontStyle: 'italic', fontWeight: '600' }}>"{quotes[Math.floor(Math.random() * quotes.length)]}"</p>
+                            <Link to="/dashboard" style={{ textDecoration: 'none', background: '#00ccff', color: '#000', padding: '1rem 2.5rem', borderRadius: '15px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.85rem' }}>Begin New Journey</Link>
+                        </div>
+                    ) : (
+                        <div style={{ overflowX: 'auto', borderRadius: '1.5rem', border: '1px solid rgba(255, 255, 255, 0.05)', background: '#080809' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <th style={{ padding: '1.5rem 2.5rem', color: '#333', fontSize: '0.8rem', fontWeight: '900', letterSpacing: '1px' }}>DATE</th>
+                                        {activeHabitsForPeriod.map(habit => (
+                                            <th key={habit._id} style={{ padding: '1.5rem 1.5rem', color: '#00ccff', fontSize: '0.8rem', fontWeight: '900', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                                                {habit.title}
+                                                {habit.isDeleted && <span style={{ display: 'block', fontSize: '0.6rem', color: '#ff4d4d', marginTop: '4px' }}>(DELETED)</span>}
+                                                {habit.isArchived && <span style={{ display: 'block', fontSize: '0.6rem', color: '#888', marginTop: '4px' }}>(ARCHIVED)</span>}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dayNumbers.map(day => {
+                                        const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                                         return (
-                                            <td key={habit._id} style={{ padding: '1.5rem 1.5rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                    <span style={{ color: '#fff', fontWeight: '900', fontSize: '1rem' }}>
-                                                        {compCount}/{daysInMonth}
-                                                    </span>
-                                                    <span style={{ color: '#00ccff', fontWeight: '800', fontSize: '0.7rem', opacity: 0.8 }}>
-                                                        ({percentage}%)
-                                                    </span>
-                                                </div>
-                                            </td>
+                                            <tr key={day} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', transition: '0.2s' }}>
+                                                <td style={{ padding: '1.2rem 2.5rem', fontWeight: '800', color: '#444' }}>{String(day).padStart(2, '0')}</td>
+                                                {activeHabitsForPeriod.map(habit => {
+                                                    const creationDateOnly = new Date(habit.createdAt).toISOString().split('T')[0];
+                                                    const isBeforeCreation = dateStr < creationDateOnly;
+                                                    const isCompleted = (habit.completedDates || []).includes(dateStr);
+                                                    return (
+                                                        <td key={habit._id} style={{ padding: '1.2rem 1.5rem' }}>
+                                                            {isBeforeCreation ? <span style={{ color: '#222', fontWeight: '900', fontSize: '1rem' }}>-</span> : (
+                                                                <span style={{ padding: '6px 16px', borderRadius: '50px', fontSize: '0.75rem', fontWeight: '900', textTransform: 'uppercase', background: isCompleted ? 'rgba(0, 204, 255, 0.1)' : 'rgba(239, 68, 68, 0.05)', color: isCompleted ? '#00ccff' : '#444', border: isCompleted ? '1px solid rgba(0, 204, 255, 0.2)' : '1px solid rgba(239, 68, 68, 0.1)' }}>
+                                                                    {isCompleted ? 'YES' : 'NO'}
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
                                         );
                                     })}
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
+                                </tbody>
+                                <tfoot>
+                                    <tr style={{ background: 'rgba(0, 204, 255, 0.03)', borderTop: '2px solid rgba(255,255,255,0.05)' }}>
+                                        <td style={{ padding: '1.5rem 2.5rem', fontWeight: '900', color: '#00ccff', fontSize: '0.8rem', letterSpacing: '1px' }}>TOTAL</td>
+                                        {activeHabitsForPeriod.map(habit => {
+                                            const mPre = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+                                            const compCount = (habit.completedDates || []).filter(d => d.startsWith(mPre)).length;
+                                            const percentage = Math.round((compCount / daysInMonth) * 100);
+                                            return (
+                                                <td key={habit._id} style={{ padding: '1.5rem 1.5rem' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                        <span style={{ color: '#fff', fontWeight: '900', fontSize: '1rem' }}>{compCount}/{daysInMonth}</span>
+                                                        <span style={{ color: '#00ccff', fontWeight: '800', fontSize: '0.7rem', opacity: 0.8 }}>({percentage}%)</span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </main>
             <Footer />

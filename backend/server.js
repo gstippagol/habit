@@ -1,5 +1,10 @@
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 import express from "express";
 import cors from "cors";
@@ -7,11 +12,15 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
 import { initReminderCron } from "./utils/reminderCron.js";
+import { initMonthlyReportCron } from "./utils/reportCron.js";
 
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+    origin: [process.env.FRONTEND_URL, 'https://pvthabit-tracker.netlify.app', 'http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
 
 // Request logger
@@ -55,6 +64,7 @@ const PORT = process.env.PORT || 5000;
 // Connect to DB then start server
 connectDB().then(() => {
     initReminderCron();
+    initMonthlyReportCron();
     app.listen(PORT, () => {
         console.log(`🚀 Backend running on port ${PORT}`);
     });

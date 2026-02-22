@@ -69,9 +69,62 @@ export const toggleHabitDate = async (req, res) => {
 
 export const deleteHabit = async (req, res) => {
     try {
+        // Soft delete: set isDeleted to true and record timestamp
+        const habit = await Habit.findOneAndUpdate(
+            { _id: req.params.id, user: req.user._id },
+            { isDeleted: true, deletedAt: new Date() },
+            { new: true }
+        );
+        if (!habit) return res.status(404).json({ message: 'Habit not found' });
+
+        // Record Activity
+        await ActivityLog.create({
+            user: req.user._id,
+            type: 'habit_delete_soft',
+            details: `Moved habit to bin: ${habit.title}`
+        });
+
+        res.json({ message: 'Habit moved to bin', habit });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const restoreHabit = async (req, res) => {
+    try {
+        const habit = await Habit.findOneAndUpdate(
+            { _id: req.params.id, user: req.user._id },
+            { isDeleted: false, deletedAt: null, isArchived: false },
+            { new: true }
+        );
+        if (!habit) return res.status(404).json({ message: 'Habit not found' });
+
+        await ActivityLog.create({
+            user: req.user._id,
+            type: 'habit_restore',
+            details: `Restored habit from bin: ${habit.title}`
+        });
+
+        res.json(habit);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const getBinHabits = async (req, res) => {
+    try {
+        const habits = await Habit.find({ user: req.user._id, isDeleted: true });
+        res.json(habits);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+export const permanentDeleteHabit = async (req, res) => {
+    try {
         const habit = await Habit.findOneAndDelete({ _id: req.params.id, user: req.user._id });
         if (!habit) return res.status(404).json({ message: 'Habit not found' });
-        res.json({ message: 'Habit deleted' });
+        res.json({ message: 'Habit permanently deleted' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

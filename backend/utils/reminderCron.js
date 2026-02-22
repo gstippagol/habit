@@ -65,7 +65,7 @@ export const initReminderCron = () => {
                                 <li>💪 Strengthen your self-discipline.</li>
                             </ul>
                             <div style="text-align: center; margin-top: 30px;">
-                                <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}" 
+                                <a href="${process.env.FRONTEND_URL || 'https://pvthabit-tracker.netlify.app'}" 
                                    style="background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #000; padding: 12px 30px; text-decoration: none; border-radius: 50px; font-weight: 900; box-shadow: 0 10px 20px rgba(0, 204, 255, 0.2);">
                                    🚀 GO TO MY DASHBOARD
                                 </a>

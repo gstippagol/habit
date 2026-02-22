@@ -1,6 +1,25 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || '/api';
+const VITE_API_URL = import.meta.env.VITE_API_URL || 'https://habit-qed4.onrender.com/api';
+
+// Normalize API_URL: 
+// 1. Remove trailing slash
+// 2. If it is just "/" or empty, default to "/api" to ensure it hits the proxy
+// 3. Ensure remote URLs contain "/api" if they appear to be missing it
+let normalizedUrl = VITE_API_URL.trim().replace(/\/$/, "");
+
+if (normalizedUrl === "" || normalizedUrl === "/") {
+    normalizedUrl = "/api";
+} else if (normalizedUrl.startsWith('http') && !normalizedUrl.endsWith('/api')) {
+    // If it's a remote URL and doesn't end with /api, add it
+    // This handles cases where the user set VITE_API_URL to the base domain
+    normalizedUrl = `${normalizedUrl}/api`;
+}
+
+const API_URL = normalizedUrl;
+console.log(`🔌 API initialized at: ${API_URL}`);
+
+
 
 // Axios Interceptor for Deactivation/Auth failures
 axios.interceptors.response.use(
@@ -96,9 +115,14 @@ export const archiveHabit = async (id, status = true) => {
 
 export const deleteHabit = async (id) => {
     try {
-        await axios.delete(`${API_URL}/habits/${id}`, { headers: getAuthHeader() });
-        const habits = getLocalHabits().filter(h => h._id !== id);
-        saveLocalHabits(habits);
+        const response = await axios.delete(`${API_URL}/habits/${id}`, { headers: getAuthHeader() });
+        const localHabits = getLocalHabits();
+        const exists = localHabits.find(h => h._id === id);
+        if (exists) {
+            saveLocalHabits(localHabits.map(h => h._id === id ? response.data.habit : h));
+        } else {
+            saveLocalHabits([...localHabits, response.data.habit]);
+        }
     } catch (err) {
         const habits = getLocalHabits().filter(h => h._id !== id);
         saveLocalHabits(habits);
@@ -116,6 +140,31 @@ export const updateHabit = async (id, habitData) => {
         saveLocalHabits(habits);
         return habits.find(h => h._id === id);
     }
+};
+
+export const fetchBinHabits = async () => {
+    const response = await axios.get(`${API_URL}/habits/bin`, { headers: getAuthHeader() });
+    return response.data;
+};
+
+export const restoreHabit = async (id) => {
+    const response = await axios.post(`${API_URL}/habits/${id}/restore`, {}, { headers: getAuthHeader() });
+    const localHabits = getLocalHabits();
+    const exists = localHabits.find(h => h._id === id);
+    let updatedHabits;
+    if (exists) {
+        updatedHabits = localHabits.map(h => h._id === id ? response.data : h);
+    } else {
+        updatedHabits = [...localHabits, response.data];
+    }
+    saveLocalHabits(updatedHabits);
+    return response.data;
+};
+
+export const permanentDeleteHabit = async (id) => {
+    await axios.delete(`${API_URL}/habits/${id}/permanent`, { headers: getAuthHeader() });
+    const habits = getLocalHabits().filter(h => h._id !== id);
+    saveLocalHabits(habits);
 };
 
 export const loginUser = async (credentials) => {

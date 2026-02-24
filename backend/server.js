@@ -18,7 +18,20 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-    origin: [process.env.FRONTEND_URL, 'https://pvthabit-tracker.netlify.app', 'http://localhost:5173'],
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            process.env.FRONTEND_URL,
+            'https://pvthabit-tracker.netlify.app',
+            'https://pvthabit-tracker.netlify.app/',
+            'http://localhost:5173'
+        ].filter(Boolean);
+
+        if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes(origin + '/')) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 app.use(express.json());
@@ -62,10 +75,16 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 5000;
 
 // Connect to DB then start server
-connectDB().then(() => {
-    initReminderCron();
-    initMonthlyReportCron();
-    app.listen(PORT, () => {
-        console.log(`🚀 Backend running on port ${PORT}`);
+connectDB()
+    .then(() => {
+        initReminderCron();
+        initMonthlyReportCron();
+        app.listen(PORT, () => {
+            console.log(`🚀 Backend running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('🚨 FATAL: Could not connect to database. Server will not start.');
+        console.error('   Error:', err.message);
+        process.exit(1);
     });
-});

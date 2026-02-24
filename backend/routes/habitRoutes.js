@@ -13,7 +13,7 @@ router.patch('/:id/toggle', toggleHabitDate);
 router.patch('/:id/archive', archiveHabit);
 router.post('/:id/restore', restoreHabit);
 router.put('/:id', updateHabit);
-router.delete('/:id', deleteHabit);
 router.delete('/:id/permanent', permanentDeleteHabit);
+router.delete('/:id', deleteHabit);
 
 export default router;

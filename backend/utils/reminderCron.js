@@ -1,8 +1,14 @@
 import cron from 'node-cron';
 import User from '../models/User.js';
 import Habit from '../models/Habit.js';
+import ActivityLog from '../models/ActivityLog.js';
 import { sendMail } from './mailer.js';
 
+/**
+ * Initializes the reminder cron job.
+ * Scans for users who are inactive (no habit marks for 2 days) or have no habits.
+ * Sends motivational emails based on discipline.
+ */
 export const initReminderCron = () => {
     // Run every day at 10:00 AM
     cron.schedule('0 10 * * *', async () => {
@@ -13,16 +19,81 @@ export const initReminderCron = () => {
             today.setHours(0, 0, 0, 0);
 
             for (const user of users) {
-                // Find all habits for this user
-                const habits = await Habit.find({ user: user._id, isArchived: false });
-                if (habits.length === 0) continue;
+                // Find all active habits for this user
+                const habits = await Habit.find({ user: user._id, isArchived: false, isDeleted: false });
 
-                // Check if user has already received a reminder in the last 2 days to avoid spam
+                // --- CASE 1: USER HAS NO HABITS ---
+                if (habits.length === 0) {
+                    // Check if they were created at least 24 hours ago
+                    const oneDayAgo = new Date();
+                    oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+
+                    if (user.createdAt > oneDayAgo) continue;
+                    if (user.lastReminderSent) continue; // Only send the "Starter" nudge once
+
+                    console.log(`📡 Sending 'Starter' nudge to: ${user.username}`);
+
+                    const starterEmailHtml = `
+                        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; background: #050505; color: #ffffff; border-radius: 20px; max-width: 600px; margin: auto; border: 1px solid rgba(0, 204, 255, 0.1);">
+                            <div style="text-align: center; margin-bottom: 30px;">
+                                <div style="display: inline-block; padding: 15px; background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); border-radius: 12px; color: #000; font-weight: 900; font-size: 1.5rem;">HT</div>
+                            </div>
+                            <h1 style="color: #00ccff; text-align: center; font-size: 1.8rem; margin-bottom: 10px;">The First Step is Always the Hardest</h1>
+                            <p style="text-align: center; color: #888; font-size: 1.1rem; font-style: italic;">"A journey of a thousand miles begins with a single step."</p>
+                            
+                            <div style="background: rgba(255,255,255,0.03); padding: 25px; border-radius: 15px; margin: 30px 0; border: 1px solid rgba(255,255,255,0.05);">
+                                <p style="line-height: 1.6; font-size: 1rem;">Hi <strong>${user.username}</strong>,</p>
+                                <p style="line-height: 1.6;">You joined <strong>Habit Tracker</strong> to build a better version of yourself, but your dashboard is still empty.</p>
+                                <p style="line-height: 1.6; color: #00ccff; font-weight: bold;">Discipline is the bridge between goals and accomplishment.</p>
+                            </div>
+
+                            <p style="font-weight: bold; color: #ccc; margin-bottom: 10px;">Start tonight:</p>
+                            <ul style="color: #888; line-height: 1.8;">
+                                <li>✨ Create just ONE habit. Keep it simple.</li>
+                                <li>💧 Example: "Drink 2L Water" or "Read 5 Pages".</li>
+                                <li>🧠 Action breeds confidence. Start now.</li>
+                            </ul>
+
+                            <div style="text-align: center; margin-top: 40px;">
+                                <a href="${process.env.FRONTEND_URL || 'https://pvthabit-tracker.netlify.app'}" 
+                                   style="background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #000; padding: 15px 35px; text-decoration: none; border-radius: 12px; font-weight: 900; display: inline-block; letter-spacing: 1px;">
+                                   CREATE MY FIRST HABIT ➔
+                                </a>
+                            </div>
+                            
+                            <p style="color: #444; font-size: 0.8rem; margin-top: 40px; text-align: center;">
+                                Stay Disciplined. <br>
+                                <strong>The Habit Tracker Team</strong>
+                            </p>
+                        </div>
+                    `;
+
+                    await sendMail({
+                        to: user.email,
+                        subject: "Your journey starts today... 🚀",
+                        html: starterEmailHtml
+                    });
+
+                    // Record nudge in ActivityLog
+                    await ActivityLog.create({
+                        user: user._id,
+                        type: 'email_nudge',
+                        details: 'Starter Motivation: Sent to user with 0 habits'
+                    }).catch(err => console.error('Activity Log Error (Starter):', err.message));
+
+                    user.lastReminderSent = new Date();
+                    await user.save();
+                    continue;
+                }
+
+                // --- CASE 2: USER HAS HABITS BUT IS INACTIVE ---
+
+                // Avoid spam: Only send every 3 days
                 if (user.lastReminderSent) {
                     const lastReminderDate = new Date(user.lastReminderSent);
                     const diffTime = Math.abs(today - lastReminderDate);
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    if (diffDays < 3) continue; // Only remind every 3 days if they stay inactive
+                    if (diffDays < 3) continue;
                 }
 
                 let isInactive = true;
@@ -30,7 +101,7 @@ export const initReminderCron = () => {
                 twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
                 twoDaysAgo.setHours(0, 0, 0, 0);
 
-                // A user is "Active" if ANY of their habits has a mark in the last 2 days
+                // Check for ANY recent marks across all habits
                 for (const habit of habits) {
                     const recentMarks = (habit.completedDates || []).filter(dateStr => {
                         const markDate = new Date(dateStr);
@@ -44,34 +115,38 @@ export const initReminderCron = () => {
                 }
 
                 if (isInactive) {
-                    console.log(`📡 Sending nudge to: ${user.username} (${user.email})`);
+                    console.log(`📡 Sending 'Discipline' nudge to: ${user.username}`);
 
                     const emailHtml = `
-                        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px; background: #fafafa;">
-                            <h2 style="color: #00ccff; text-align: center;">Don't break the chain! ⛓️</h2>
-                            <p style="font-size: 1.1rem; color: #333;">Hi <strong>${user.username}</strong>,</p>
-                            <p style="line-height: 1.6; color: #555;">
-                                We noticed your dashboard has been a bit quiet for the past <strong>2 days</strong>. 
-                            </p>
-                            <div style="background: #fff; padding: 15px; border-radius: 8px; border-left: 4px solid #00ccff; margin: 20px 0;">
-                                <p style="margin: 0; font-style: italic; color: #666;">
-                                    "Consistency is the only bridge between your goals and your reality. Every day you skip is a day you move further away from the person you want to become."
-                                </p>
+                        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; background: #050505; color: #ffffff; border-radius: 20px; max-width: 600px; margin: auto; border: 1px solid rgba(0, 204, 255, 0.1);">
+                            <div style="text-align: center; margin-bottom: 30px;">
+                                <div style="display: inline-block; padding: 15px; background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); border-radius: 12px; color: #000; font-weight: 900; font-size: 1.5rem;">HT</div>
                             </div>
-                            <p style="font-weight: bold; color: #333;">Why jump back in?</p>
-                            <ul style="color: #555;">
-                                <li>🔥 Protect your current streaks.</li>
-                                <li>📈 Keep your visual analytics growing.</li>
-                                <li>💪 Strengthen your self-discipline.</li>
+                            <h1 style="color: #00ccff; text-align: center; font-size: 1.8rem; margin-bottom: 10px;">Discipline is Choice</h1>
+                            <p style="text-align: center; color: #888; font-size: 1.1rem; font-style: italic;">"Motivation gets you started; discipline keeps you going."</p>
+                            
+                            <div style="background: rgba(255,255,255,0.03); padding: 25px; border-radius: 15px; margin: 30px 0; border: 1px solid rgba(255,255,255,0.05);">
+                                <p style="line-height: 1.6; font-size: 1rem;">Hi <strong>${user.username}</strong>,</p>
+                                <p style="line-height: 1.6;">You haven't logged any progress for <strong>2 days</strong>. Streaks are easy to break but hard to build.</p>
+                                <p style="line-height: 1.6; color: #00ccff; font-weight: bold;">"We are what we repeatedly do. Excellence, then, is not an act, but a habit."</p>
+                            </div>
+
+                            <p style="font-weight: bold; color: #ccc; margin-bottom: 10px;">Reclaim your focus:</p>
+                            <ul style="color: #888; line-height: 1.8;">
+                                <li>🔥 Don't let your current streaks expire.</li>
+                                <li>💪 It takes 1% better every day to reach your peak.</li>
+                                <li>⛓️ Success is built on the days you don't feel like it.</li>
                             </ul>
-                            <div style="text-align: center; margin-top: 30px;">
+
+                            <div style="text-align: center; margin-top: 40px;">
                                 <a href="${process.env.FRONTEND_URL || 'https://pvthabit-tracker.netlify.app'}" 
-                                   style="background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #000; padding: 12px 30px; text-decoration: none; border-radius: 50px; font-weight: 900; box-shadow: 0 10px 20px rgba(0, 204, 255, 0.2);">
-                                   🚀 GO TO MY DASHBOARD
+                                   style="background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); color: #000; padding: 15px 35px; text-decoration: none; border-radius: 12px; font-weight: 900; display: inline-block; letter-spacing: 1px;">
+                                   RESUME MY PROGRESS ➔
                                 </a>
                             </div>
-                            <p style="color: #888; font-size: 0.8rem; margin-top: 40px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
-                                Discipline over motivation. <br>
+                            
+                            <p style="color: #444; font-size: 0.8rem; margin-top: 40px; text-align: center;">
+                                Discipline > Motivation. <br>
                                 <strong>The Habit Tracker Team</strong>
                             </p>
                         </div>
@@ -79,9 +154,16 @@ export const initReminderCron = () => {
 
                     await sendMail({
                         to: user.email,
-                        subject: "Your habits are waiting... ⛓️",
+                        subject: "Discipline equals freedom... ⛓️",
                         html: emailHtml
                     });
+
+                    // Record nudge in ActivityLog
+                    await ActivityLog.create({
+                        user: user._id,
+                        type: 'email_nudge',
+                        details: 'Discipline Nudge: Sent to inactive user (2 days no marks)'
+                    }).catch(err => console.error('Activity Log Error (Discipline):', err.message));
 
                     // Update last reminder sent date
                     user.lastReminderSent = new Date();

@@ -5,8 +5,6 @@ import Habit from '../models/Habit.js';
 import ActivityLog from '../models/ActivityLog.js';
 import { sendMail } from '../utils/mailer.js';
 
-// ... (rest of imports and generateToken)
-
 export const logout = async (req, res) => {
     const { durationMinutes } = req.body;
     try {
@@ -184,47 +182,60 @@ export const adminCreateUser = async (req, res) => {
 export const login = async (req, res) => {
     const { email, password, deviceInfo } = req.body;
     try {
-        const identifier = email.toLowerCase();
-        // Allow login with either email or username
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email/Username and Password are required' });
+        }
+
+        const identifier = email.toLowerCase().trim();
+        console.log(`🔍 Login attempt: "${identifier}"`);
+
         const user = await User.findOne({
             $or: [
                 { email: identifier },
-                { username: { $regex: new RegExp('^' + identifier + '$', 'i') } }
+                { username: { $regex: new RegExp('^' + identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } }
             ]
         });
 
-        if (user && (await bcrypt.compare(password, user.password))) {
-            // Check if account is active
-            if (user.isActive === false) {
-                return res.status(403).json({ message: 'Account Deactivated: Access is restricted by administrator.' });
-            }
-
-            // Record Login Activity with Device Intelligence
-            await ActivityLog.create({
-                user: user._id,
-                type: 'login',
-                details: `User logged in from ${deviceInfo?.os || 'Unknown Device'}`,
-                loginTime: new Date(),
-                metadata: {
-                    browser: deviceInfo?.browser,
-                    os: deviceInfo?.os,
-                    ip: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
-                }
-            });
-
-            res.json({
-                _id: user._id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-                isActive: user.isActive,
-                token: generateToken(user._id)
-            });
-        } else {
-            res.status(401).json({ message: 'Invalid credentials or password' });
+        if (!user) {
+            console.warn(`❌ Not found: ${identifier}`);
+            return res.status(401).json({ message: 'Invalid credentials or password' });
         }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            console.warn(`❌ Password mismatch: ${user.email}`);
+            return res.status(401).json({ message: 'Invalid credentials or password' });
+        }
+
+        if (user.isActive === false) {
+            return res.status(403).json({ message: 'Account Deactivated: Access restricted.' });
+        }
+
+        // Record login activity (non-blocking)
+        ActivityLog.create({
+            user: user._id,
+            type: 'login',
+            details: `User logged in from ${deviceInfo?.os || 'Unknown Device'}`,
+            loginTime: new Date(),
+            metadata: {
+                browser: deviceInfo?.browser,
+                os: deviceInfo?.os,
+                ip: req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress
+            }
+        }).catch(err => console.error('ActivityLog error:', err.message));
+
+        console.log(`✅ Login success: ${user.email} (${user.role})`);
+        return res.json({
+            _id: user._id,
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            isActive: user.isActive,
+            token: generateToken(user._id)
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('💥 Login Error:', error);
+        res.status(500).json({ message: 'Server error: ' + error.message });
     }
 };
 
@@ -333,6 +344,8 @@ export const deleteUser = async (req, res) => {
     const { id } = req.params;
     try {
         const user = await User.findById(id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
         if (user.role === 'admin') {
             return res.status(403).json({ message: 'Restricted Action: Administrative accounts cannot be purged.' });
         }

@@ -2,14 +2,16 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
 export const protect = async (req, res, next) => {
-    let token;
+    const authHeader = req.headers.authorization;
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
         try {
-            token = req.headers.authorization.split(' ')[1];
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             req.user = await User.findById(decoded.id).select('-password');
-            if (!req.user) return res.status(401).json({ message: 'User not found' });
+            if (!req.user) {
+                return res.status(401).json({ message: 'User not found' });
+            }
 
             if (req.user.isActive === false) {
                 return res.status(403).json({ message: 'Account Deactivated: Access is restricted by administrator.' });
@@ -17,12 +19,10 @@ export const protect = async (req, res, next) => {
 
             next();
         } catch (error) {
-            console.error(error);
-            res.status(401).json({ message: 'Not authorized, token failed' });
+            console.error('Token verification failed:', error.message);
+            return res.status(401).json({ message: 'Not authorized, token failed' });
         }
-    }
-
-    if (!token) {
+    } else {
         return res.status(401).json({ message: 'Not authorized, no token' });
     }
 };

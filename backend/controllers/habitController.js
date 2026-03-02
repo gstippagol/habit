@@ -12,11 +12,14 @@ export const getHabits = async (req, res) => {
 };
 
 export const createHabit = async (req, res) => {
-    const { title, target } = req.body;
+    const { title, target, frequencyType, specificDays, weeklyQuota } = req.body;
     try {
         const newHabit = new Habit({
             title,
             target,
+            frequencyType: frequencyType || 'daily',
+            specificDays: specificDays || [],
+            weeklyQuota: weeklyQuota || 0,
             user: req.user._id
         });
         await newHabit.save();
@@ -52,6 +55,13 @@ export const toggleHabitDate = async (req, res) => {
         }
 
         habit.streak = habit.completedDates.length;
+
+        // Calculate Streak exclusively within the current month
+        const now = new Date();
+        const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentMonthCompletions = habit.completedDates.filter(d => d.startsWith(currentMonthPrefix));
+        habit.streak = currentMonthCompletions.length;
+
         await habit.save();
 
         // Record Activity
@@ -153,14 +163,40 @@ export const archiveHabit = async (req, res) => {
     }
 };
 export const updateHabit = async (req, res) => {
-    const { title, target } = req.body;
+    const { title, target, frequencyType, specificDays, weeklyQuota } = req.body;
     try {
         const habit = await Habit.findOneAndUpdate(
             { _id: req.params.id, user: req.user._id },
-            { title, target },
+            { title, target, frequencyType, specificDays, weeklyQuota },
             { new: true }
         );
         if (!habit) return res.status(404).json({ message: 'Habit not found' });
+        res.json(habit);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Add or update a note for a specific date
+// @route   POST /api/habits/:id/note
+// @access  Private
+export const addHabitNote = async (req, res) => {
+    try {
+        const { date, note } = req.body;
+        const habit = await Habit.findOne({ _id: req.params.id, user: req.user._id });
+        if (!habit) return res.status(404).json({ message: 'Habit not found' });
+
+        if (!habit.notes) {
+            habit.notes = new Map();
+        }
+
+        if (note && note.trim()) {
+            habit.notes.set(date, note.trim());
+        } else {
+            habit.notes.delete(date);
+        }
+
+        await habit.save();
         res.json(habit);
     } catch (error) {
         res.status(500).json({ message: error.message });

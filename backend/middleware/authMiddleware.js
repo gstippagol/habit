@@ -17,6 +17,10 @@ export const protect = async (req, res, next) => {
                 return res.status(403).json({ message: 'Account Deactivated: Access is restricted by administrator.' });
             }
 
+            if (req.user.activeDesktopToken !== token && req.user.activeMobileToken !== token) {
+                return res.status(401).json({ message: 'Session expired. You have logged in from another device.' });
+            }
+
             next();
         } catch (error) {
             console.error('Token verification failed:', error.message);

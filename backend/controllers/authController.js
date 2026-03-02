@@ -15,6 +15,17 @@ export const logout = async (req, res) => {
             durationMinutes: durationMinutes || 0,
             logoutTime: new Date()
         });
+
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token) {
+            const user = await User.findById(req.user._id);
+            if (user) {
+                if (user.activeDesktopToken === token) user.activeDesktopToken = null;
+                if (user.activeMobileToken === token) user.activeMobileToken = null;
+                await user.save();
+            }
+        }
+
         res.json({ message: 'Logout recorded' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -136,12 +147,16 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 12);
         const user = await User.create({ username, email, password: hashedPassword });
 
+        const token = generateToken(user._id);
+        user.activeDesktopToken = token;
+        await user.save();
+
         res.status(201).json({
             _id: user._id,
             username: user.username,
             email: user.email,
             role: user.role,
-            token: generateToken(user._id)
+            token: token
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -211,6 +226,17 @@ export const login = async (req, res) => {
             return res.status(403).json({ message: 'Account Deactivated: Access restricted.' });
         }
 
+        const token = generateToken(user._id);
+        const osString = deviceInfo?.os || '';
+        const isMobile = osString.includes('Android') || osString.includes('iOS') || osString.includes('mobile');
+
+        if (isMobile) {
+            user.activeMobileToken = token;
+        } else {
+            user.activeDesktopToken = token;
+        }
+        await user.save();
+
         // Record login activity (non-blocking)
         ActivityLog.create({
             user: user._id,
@@ -231,7 +257,7 @@ export const login = async (req, res) => {
             email: user.email,
             role: user.role,
             isActive: user.isActive,
-            token: generateToken(user._id)
+            token: token
         });
     } catch (error) {
         console.error('💥 Login Error:', error);

@@ -29,7 +29,27 @@ const userSchema = new mongoose.Schema(
         },
         resetPasswordOTP: String,
         resetPasswordExpires: Date,
-        lastReminderSent: Date
+        lastReminderSent: Date,
+        pushSubscription: {
+            type: Object,
+            default: null
+        },
+        reminderTime: {
+            type: String,
+            default: "20:00" // Default 8 PM
+        },
+        pushEnabled: {
+            type: Boolean,
+            default: false
+        },
+        activeDesktopToken: {
+            type: String,
+            default: null
+        },
+        activeMobileToken: {
+            type: String,
+            default: null
+        }
     },
     { timestamps: true }
 );

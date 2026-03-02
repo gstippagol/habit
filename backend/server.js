@@ -11,8 +11,10 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
+import pushRoutes from "./routes/pushRoutes.js";
 import { initReminderCron } from "./utils/reminderCron.js";
 import { initMonthlyReportCron } from "./utils/reportCron.js";
+import { initPushCron } from "./utils/pushCron.js";
 
 const app = express();
 
@@ -44,6 +46,7 @@ app.use((req, res, next) => {
         // Log a sanitized version of the body (hide passwords)
         const sanitizedBody = { ...req.body };
         if (sanitizedBody.password) sanitizedBody.password = '********';
+        if (sanitizedBody.subscription) sanitizedBody.subscription = '[PUSH_SUB]';
         console.log(`   Body:`, JSON.stringify(sanitizedBody, null, 2));
     }
     next();
@@ -53,6 +56,7 @@ app.use((req, res, next) => {
 const mountRoutes = (base) => {
     app.use(`${base}/auth`, authRoutes);
     app.use(`${base}/habits`, habitRoutes);
+    app.use(`${base}/push`, pushRoutes);
 };
 
 mountRoutes("/api");
@@ -79,6 +83,7 @@ connectDB()
     .then(() => {
         initReminderCron();
         initMonthlyReportCron();
+        initPushCron();
         app.listen(PORT, () => {
             console.log(`🚀 Backend running on port ${PORT}`);
         });

@@ -6,6 +6,28 @@ const habitSchema = new mongoose.Schema({
     completedDates: { type: [String], default: [] }, // Store dates as YYYY-MM-DD strings
     streak: { type: Number, default: 0 },
     target: { type: Number, default: 10 },
+
+    // Frequency fields
+    frequencyType: {
+        type: String,
+        enum: ['daily', 'specific_days', 'weekly_quota'],
+        default: 'daily'
+    },
+    specificDays: {
+        type: [Number], // 0 (Sun) to 6 (Sat)
+        default: []
+    },
+    weeklyQuota: {
+        type: Number,
+        default: 0
+    },
+
+    notes: {
+        type: Map,
+        of: String,
+        default: {}
+    },
+
     isArchived: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null }

@@ -17,7 +17,7 @@ export const protect = async (req, res, next) => {
                 return res.status(403).json({ message: 'Account Deactivated: Access is restricted by administrator.' });
             }
 
-            if (req.user.activeDesktopToken !== token && req.user.activeMobileToken !== token) {
+            if (req.user.role !== 'demo' && req.user.activeDesktopToken !== token && req.user.activeMobileToken !== token) {
                 return res.status(401).json({ message: 'Session expired. You have logged in from another device.' });
             }
 
@@ -28,5 +28,13 @@ export const protect = async (req, res, next) => {
         }
     } else {
         return res.status(401).json({ message: 'Not authorized, no token' });
+    }
+};
+
+export const adminAuth = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Restricted Action. Only Administrators can perform this action.' });
     }
 };

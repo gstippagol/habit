@@ -15,6 +15,7 @@ import pushRoutes from "./routes/pushRoutes.js";
 import { initReminderCron } from "./utils/reminderCron.js";
 import { initMonthlyReportCron } from "./utils/reportCron.js";
 import { initPushCron } from "./utils/pushCron.js";
+import demoRoutes from "./routes/demoRoutes.js";
 
 const app = express();
 
@@ -57,6 +58,7 @@ const mountRoutes = (base) => {
     app.use(`${base}/auth`, authRoutes);
     app.use(`${base}/habits`, habitRoutes);
     app.use(`${base}/push`, pushRoutes);
+    app.use(`${base}/demo`, demoRoutes);
 };
 
 mountRoutes("/api");
